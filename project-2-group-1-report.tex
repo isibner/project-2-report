@@ -178,27 +178,33 @@ As we found through our trials, using a benefit function to determine where a pl
 After only locking the cell that the player is going towards, we also lock a radius around that cell. This allows us to create zones such that only one player clearing a zone.Through experimentation, we found that choosing a radius of max(0,3-P/10) works well. With higher number of players, the smaller the zones should become because there is not enough space to create so many zones. Addditionally, it is more likely that opponents will steal balls from a particular zone before a single player can clear that zone out.
 
 \section{Results}
-Generally speaking, we had mixed results. Our rank ranged from $1^{st}$ to $7^{th}$ place. Our most common standing was $3^{rd}$ place. We observed that scores followed relative rank, so we chose rank as the proxy for overall performance in the tournaments.
+This project has many more configuration variables compared to the previous project (eight rather than two). However, the players were not generally aware of most of these changing parameters. As such, players were designed to function reasonably well in all cases, especially those where hidden parameters were set to extremes. The results from the several tournament runs are essentially a sampling of different viable configurations for this game. As well, there are two completely different tournament scenarios to consider. For these results, only the scenarios where the players were by themselves or in a group of the best six will be considered.  
 
-The overall trend in our performance was that we did better than average given low-to-moderate $k$-values (less than 15), and any $p$-values. This makes sense in terms of our initial placement strategy. With very high values of $k$ (at least 30), our players simply started too close to our goal, and did not take advantage of the potential for long-range kicking. Teams starting in the middle were able to clear balls in a single kick, so that even when our players reached the middle sections quickly, there were few balls left. Contrarily, our players remained competitive with smaller $k$. We think that starting players near the goal led to more effective bucket brigading as described in the initial placement section above. Larger values of $p$ did not have a major impact on performance because more players allowed for a more effective covering of the map while maintaining a bucket brigade path back to the goal. It is possible that parameterizing our intitial placement by $p$ as well as $k$ could have improved our scores, but it may have negatively impacted the bucket brigading, and led to similar results.
-
-Two notable configurations are $P,K=45,1$ and $P,K=30,1$. We placed third and first in these categories, respectively. This was a surprise to us, as we had not optimized for single-player configurations at all. We attribute our success here to the globally-optimal strategy we adopted, so that in slower games with long ranges, our player was able to seek out the most beneficial balls and ball clusters across the entire map. This is in contrast with games with higher $p$, where the board layout changed so rapidly that a global-optimized strategy did not provide much benefit.
-
-Our results are summarized in the following figures.
+These tables include t-scores for SimplePlayer compared to all of the players involved. Significance, as used below, refers to significance with a confidence level of 95\% (against a t-score of 2.571).
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.8\columnwidth]{results-graph}
-\caption[Group 5 tournament results as a function of P and K]{P on the horizontal vs K on the vertical axis. Observe the yellow $3^{rd}$ place band for low $k$}
+\includegraphics[width=0.8\columnwidth]{single-runs_table}
+\caption[Table of t-score statistics for Single Run Tournaments]{t-score significance of count, energy, and energy density}
 \label{fig:gallery2}
 \end{figure}
 
+We firstly consider the results from the single player tournaments, where each tournament was run with ony one player. From the results, it appears that SimplePlayer did exceptionally well when considering the total energy held on the board. SimplePlayer had a significantly greater amount of energy than any of the other five players in thirteen out of sixteen configurations. For many of these configurations, SimplePlayer also has a significantly greater or greatest energy density (Energy / Count). These successes are most likely due to a movement strategy that favors staying on, moving to, and reproducing to cells with food.
+
+The one configuration from the single player tournaments that produced a remarkably poor performance from the SimplePlayer is Goldmines. This is due to the abnormally low value of $p$, which makes it very unlikely that a player standing still will ever see food before starving to death. Since it was more common that the SimplePlayer never had food spawn next to it, it most likely went extinct. Normally, the SimplePlayer is naturally optimized for low-$p$ conditions (seeking out food as a movement priority), but Goldmines is just too sparse of a configuration. If $p$ was slightly higher, SimplePlayer may have performed as well as it did in both The Medium Desert and The Easier Desert. Once SimplePlayer successfully managed the starting phase of a low-$p$ configuration, it ended up doing the best out of all six players included.
+
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.8\columnwidth]{results-table}
-\caption[Table of rankings per configuration]{Table of rankings per configuration}
+\includegraphics[width=0.8\columnwidth]{best6-runs_table}
+\caption[Table of t-score statistics for Best Six Tournaments]{t-score significance of count, energy, and energy density}
 \label{fig:gallery2}
 \end{figure}
+
+The results from the best six player tournaments are very different from the single player tournaments. SimplePlayer only did well in several configurations: The Medium Desert, The Easier Desert, Himalayas, Utopian Future, and Americas. The reasoning for the successful performance of SimplePlayer has already been explained above. However, the remaining two configurations are very strange. SimplePlayer performed moderately well on Hot Rainforest, but for Utopian Future it was significantly greater than any other player. The main differences are an increase in $K$ and $u$ and a decrease in $v$. The addition of such mobility, combined with the incredible reward for finding food allowed SimplePlayer to function the best. Himalayas is a larger than default board, with a higher moving cost $v$. One reason that SimplePlayer performed so well is that the movement logic is set to only move when food is available, it is not wasteful with movement. This strategy allowed SimplePlayer to perform significantly greater than every other player on both The Medium Desert and The Easier Desert, as well as the Himalayas.
+
+For the best six player configurations, there were noticeable declines in performance from the single player runs. Many of the configurations ended up being monopolized by one player (normally Group 4's FarmingPlayer), leaving very poor results for the SimplePlayer. However, despite the fact that many organism totals and organism energy levels were lower than the average produced by other organisms, the energy density was still fairly high (significant in some cases like Liechtenstein).
+
+
 
 \section{Contributions}
 
