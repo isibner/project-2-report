@@ -82,15 +82,26 @@ english
 
 \section{Introduction} % This section will not appear in the table of contents due to the star (\section*)
 
-Parallel Soccer is a game in which four teams of $P$ players (where $P$ can vary from 1 to 250) compete to kick soccer balls into their teams' goal. The goals are arranged in each corner of a $32 \times 32$ grid, and the rest of the squares on the board are initialized to contain one ball each, for a total of $1,020$ balls on the board to start off with. In the first step of the game, each team can place each of their $P$ players anywhere on the board; multiple players can potentially occupy the same square. After that, each player (with full knowledge of the board) must choose to either \textit{kick} a ball in their square up to $K$ distance away (with $K$ being a constant whose value may vary between one and 45), or \textit{move} up to 1 square in any direction (including diagonals). When a ball is kicked into a team's goal, that team is awarded a point and the ball is removed from play. The game ends when all balls are removed from play, and the team with the most points wins.
+The Organisms game consists of a world (an $m \times n$) grid populated by one or more organisms. Each organism has a \textit{brain} (its controlling program) and an \textit{energy level}. An organism expends energy each turn - 1 unit to stay in the same place, and some variable amount of energy $v$ to move to one of its four unoccupied neighbor squares (up, right, down, and left). Moving off the board is allowed; the world wraps around and the organism simply appears on the opposite side. An organism gains energy by eating food, which has some probability of spontaneously appearing on an empty cell. Multiple units of food can occupy a given cell, up to some threshold, and each turn a unit of food in a cell which is not occupied by an organism has a chance of doubling (so a cell with three units of food may have anywhere from 3 to 6 units the next turn depending on randomness). An organism can also \textit{reproduce} onto an adjacent empty square at the cost of $v$ energy. Each unit will have half of the organism's remaining energy after paying the reproduction cost.
 
-\begin{figure}[ht!]
-\centering
-\includegraphics[width=0.8\columnwidth]{initial-position}
-\caption[Initial board of a parallel football game]{An initial positioning of the board where $P=7$}
-\label{fig:gallery}
-\end{figure}
-\pagebreak
+The parameters of the simulation are listed below:
+
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Parameter} & \textbf{Meaning}\\ \hline
+$m$ & Horizontal board size (X-direction) \\ \hline
+$n$ & Vertical board size (Y-direction) \\ \hline
+$p$ & Chance of food spontaneously appearing in an unoccupied space \\ \hline
+$q$ & Chance that a given unit of food in an unoccupied space will double \\ \hline
+$v$ & Energy consumed by moving or reproducing \\ \hline
+$u$ & Energy gained by an organism for consumption of one unit of food \\ \hline
+$M$ & Maximum energy level for an organism \\ \hline
+$K$ & Maximum number of food units per cell \\ \hline
+\end{tabular}
+
+Additionally, an organism has a \textit{state} (an integer between 0 and 255) which it can set each turn it acts. An organism can only ``see'' in four directions (up, right, down, and left). It can sense the amount of food in its current cell, the presence of food in the four neighboring cells (but not the amount), and the presence and state of any organism in the neighboring cells. Organisms are aware of only a limited subset of parameter values ($v$, $u$, $M$, and $K$) but not the others.
+
+Each turn, an organism can change its state, stay put, move, or reproduce. Moves are calculated row-by-row, from top to bottom; this means that an organism at (1,1) will move before an organism at (2,1). If a move is not valid (possibly because another organism moved into a previously unoccupied space before another could act), then it is treated as a stay-put move.
 
 \section{Initial Insights and Observations}
 
@@ -98,25 +109,33 @@ Immediately, our team observed several key features about the game.
 
 \begin{enumerate}
   \item The information available to organisms would be very limited. They can only `see' in four directions, and could only detect food (or lack of food) and other organisms' states. So strategies that required non-local knowledge or multi-organism coordination would be difficult to implement.
-  \item Staying put is much cheaper than moving since $v \geq 1$. Also, for the majority of the setups we considered, we had $v \geq 20$.
+  \item Staying put is much cheaper than moving since $v \geq 1$. Also, for the majority of the setups we considered, we had $v \geq 20$. Therefore, an organism should stay put more often than it moves.
   \item For all setups, we had $q \geq p$. This means that food tended to `collect' in certain squares, rather than being widely distributed on empty squares.
-  \item There is a great deal of inherent randomness, especially in the beginning
-  \item Strategies may work well for certain combinations of $P$ and $K$ and not others. A smart player would change its strategy depending on what value these constants took on.
-  \item Certain strategies may work particularly well in the early phase of the game, when all the balls are on the board and there are not clusters, while others may work better in the middle phase (where there are fewer balls and more clusters) or in the end game (when there are only a few balls which every team is competing for).
-  \item Efficient strategies (i.e. those which required to fewest moves to kick a ball into the goal) would generally favor kicking over moving, since $K \geq 1$. This naturally leads to a sort of ``bucket brigade'' where players kick balls close to one another in order to ``pass'' them towards the goal.
+  \item A player with fewer individual organisms tends to die out faster, due to the random nature of food spawning. So it pays to try and reproduce.
+  \item Reproducing produces two organisms with half the energy of the original, so the more energy an organism has when it reproduces, the more likely both offspring will survive.
 \end{enumerate}
 
 These insights guided our strategy throughout and allowed us to focus on the most important aspects of the game.
 
 \section{Strategies and Concepts}
 
-\subsection {Movement \& Benefit Function}
+\subsection {XOrganism}
 
-In order for a player to decide which cell was the best move for any given board state, we created a benefit function that assigned a score to each cell for every given player. Since we had access to the entire board, we used many factors in this function, including the number of balls in a cell (and surrounding cells), distance from the cell to our goal, distance from the cell to the player, and the number of opponents around the cell. Given the loose efficiency constraints given the problem, we decided that a globally optimal benefit function would be both feasible and desirable. The primary gain from this decision was a team optimized for late gameplay, where our players were able to seek out and steal balls toward the end of the game. The reason was that once we and other teams cleared the balls near our respective goals, balls became scarce. If any team had accumulated balls, even if they were far from our players, they would seek them out and attempt to score with them.
+XOrganism was our first attempt, so we tried to create an organism that would survive on its own in a variety of conditions. The goal was to have a good survival rate in ``desert'' conditions, where $p \leq 0.005$. We did this in several ways.
 
-On the other hand, as teams improved, the game time grew shorter and quicker. In such a game, it is possible that a globally optimal zone will change into a depleted zone before a far-away team can reach it. It is likely that our model did not fully capture the constantly changing state of the game board. We addressed this by heavily weighting our own goal in benefit calculations.
+First, we defined the idea of an organism being `sated'. In effect, a sated organism is close enough to its maximum energy that it is not in immediate need of food. There are many possible definitions for satiety; we initially defined an organism as sated if $Energy_{organism} \geq M - u$. This was a fairly intuitive definition: an organism is sated if eating one more unit of food would fill it up completely.
 
-\subsection{Benefit Function}
+For movement, we tried to stay put very often because it only cost 1 unit of energy. We only moved under a few conditions:
+\begin{enumerate}
+  \item An adjacent square has food, and the organism is not `sated'. The rationale behind this movement pattern is fairly obvious - organisms tend to survive longer if they seek out food.
+  \item The organism is `sated', but its square still has food. The idea here was to be \textit{courteous}, and allow other organisms who might need that food to jump on it.
+  \item The organism has not found food in 20 turns. In this case, it moves in a random direction to try to look for food it might have missed.
+\end{enumerate}
+For reproduction, our organism was similarly simple. If the player is sated, then there is a 70\% chance of reproducing in a random direction. This ensures that when an organism does reproduce, both offspring have about half of their maximum energy, giving them a better chance of survival.
+
+This organism tended to do pretty well on its own, surviving in about 30\% of our test runs with $p=0.005$. However, it performed significantly worse than other players in configurations where food was readily available. Worse, it tended to get ``choked out'' by more aggressive players, who would often take advantage of its courteous moves to take the food for themselves and reproduce. So, while it was a fairly good start, we needed to make some changes before XOrganism could be competitive.
+
+\subsection{Protective Farmer}
 The benefit function was inspired by what we thought a human player would consider while deciding where best to move. We realized that given a point on the board, factors considered while deciding whether or not to move towards that point included not only the Euclidean distance to that point, but also the number of opponents, concentration of balls in the general vicinity of that point, and distance of that point from our home goal. Accounting for the proximity of opponents was particularly important becuase it gave us a measure of how susceptible to change the benefit of a particular cell was: the nearer the opponents, and the higher the number of opponents, the more likely it was for balls in the cell in question to be kicked out. This allowed us to take into consideration not just how the board was laid out now, but also gave us a proxy for how each cell might change in the near future.
 
 The following is the benefit function for each cell that was calculated from the perspective of each player on the board so as to allow for the player to move to the cell that offered him the greatest benefit:
@@ -124,51 +143,34 @@ $$B_{i, j} = G_{i, j} - D_{i,j} $$
 
 where $G_{i, j}$ is the gain offered by that cell and its neighboring $4 \times 4$ cluster of cells to the player and $D_{i, j}$ is the distance penalty for that cell given the position of the player and the cell. $$G_{i, j} = \sum_{a : |a - i| \leq 2}\ \ \sum_{b : |b - j| \leq 2} \alpha \times numBalls(cell_{i, j}) - \beta \times numOpponents(cell_{i,j}) $$ and $$D_{i, j} = \gamma \times cellDistanceFromPlayer(cell_{i,j}) + \delta \times numKicksFromCellToOurHomeGoal(cell_{i, j})$$ where $\alpha = 1.2$, $\beta = 0.4$, $\gamma = 1$ and $\delta = 5$ are weights. These weights were assigned based on the optimal values we found through emperical observations of our performance against other teams over a range of weights.
 
-\subsection{Cell clustering}
+\subsection{SimplePlayer}
 On the second iteration of our benefit function, we accounted for ball and opponent clustering by keeping track of the number of balls and opponents surrounding a particular cell. This allowed our players to seek out areas of high benefit, rather than single cells.
 
 After initial trials with a large radius, we settled on a radius of 4. We observed that larger radii caused the players to move back and forth somewhat inefficiently, and hypothesize that these larger zones changed too quickly for players to capitalize on them.
 
-\subsection{Kicking}
-Initially, our players would kick the maximal distance towards the goal. Although this will guarantee that the ball will be as close to the goal as possible, it does not necessarily mean that the number of steps to kick that ball in the goal is minimized when there are teamates around. With this insight, we improved the kicking algorithm with a simple calculation. A player will look at all possible cells it can kick to and minimize the number of steps to kick that ball into the goal for anyone on its team. What this translates to in practice is that a player will now pass the ball as close to a teammate as possible if the teammate is closer to the goal than itself. We observed that after implementing this kicking algorithm, the players naturally form a bucket brigade to minimize the number of steps a player needs to go to for the ball to score.
-
-\subsection{Placement}
-We experimented with several placement strategies. These ranged from clustering near the home goal, near the center, and near opponent goals. We also attempted two hard-coded early-game strategies called \emph{pincer} and \emph{fanned}. Although we eventually opted for a simple clustering around the home goal, we outline some other attempts below.
-
-The \emph{pincer} strategy placed players in lines along the sides adjacent to the home goal, and then swept balls toward the main diagonal, before harvesting them. This strategy aimed to harvest as many easy balls as possible in the very early game, while preventing teams who started in our home goal from ``stealing'' our balls. After initial testing, it turned out that this strategy quickly fell apart as soon as any opponents interfered with the hard-coded pattern, so we did not retain it in the final implementation.
-
-The \emph{fanned} strategy placed players on the edges opposite the home goal corner in a $20 \times 20$ grid, and collecting them at ``sink points'' in increasingly small radii toward the goal. This strategy aimed to fetch 300 of the 400 balls in this grid, assuming thaht 300 was a high enough number to win most matches. The results of this strategy were not great, as we had trouble balancing the tradeoff between systematically sweeping all balls in a zone, and finishing the early-stage sweep quickly enough to switch to a mid-stage strategy. In the end, the configuration was not competitive with our simpler initial placements.
-
-The centered and opponent-goal strategies were somewhat inconclusive in our testing, but generally underperformed the home-goal clustering that we ended up choosing.
-
-The most common opponent strategy was some sort of initial sweep from center-field toward their respective goals. After trying several variants of such strategies, we realized that our players were particularly effective when started from our own goal. Opponents generally swept inwards, carrying some but not all balls from somewhere in the center toward their goal, and then spreading back out to collect what they missed. Starting at the goal, we had a head start at fanning out from the offset and hoped to take advantage of center cells that were left from other team's initial sweeps relatively uncontested.
-
 \section{Implementation}
 
-\subsection{Composability}
-Because we realized that certain strategies might work very well in the early phase while others might excel in the late phase, we set about building a player that would \textit{compose} other players by switching between its component players' strategies. We met with a lot of success the second week by composing Group 1's \texttt{GridPlayer} for the first 200 turns and our own mid-game-optimized \texttt{DerickPlayer} for the remainder of the game. This worked about as expected; \texttt{GridPlayer} was far more efficient than \texttt{DerickPlayer} in the early game, but after about 200 turns, the board had grown sparser and our own player was much better at seeking out balls and scoring them. We believed this was the way forward and set about finding a more intelligent way to determine when to switch (factoring in $P$, $K$, and the number of balls left on the board).
+\subsection{XOrganism}
 
-However, during the third week of gameplay, the rest of the teams (and our own \texttt{DerickBrigadePlayer}) had become so sophisticated that the early stage of the game completely dominated. Essentially, the winner was determined by how well the early phase played out, and the middle/end phases were nearly nonexistent. Thus we decided to play a pure strategy in the final round, focused on early-game optimization, rather than continuing to compose multiple strategies.
+The implementation of XOrganism was fairly straightforward, as it only considered its current energy level and known parameter values. The only bit of state that was carried over (in addition to game state, such as current energy level) was the number of turns it had been alive (which was used in order to move every 20th turn to seek out more food). We first defined an \texttt{isSated} function (which just determined whether $Energy_{organism} \geq M - u$). Then, every turn, we did the following:
 
-\begin{figure}[h!]
-\centering
-\includegraphics[width=0.8\columnwidth]{after150}
-\caption[State of a parallel football board after 150 turns]{The state of the board after 150 turns with $P=7$, $K=6$. Note how over 60\% of the balls are already scored; this illustrates the great importance of the early game when sophisticated strategies are placed in competition.}
-\label{fig:gallery2}
-\end{figure}
+\begin{enumerate}
+  \item If the organism was sated, we would reproduce with a probability of 70\%.
+  \item If the organism did not reproduce, but still had food on its square and was sated, then it would move into an empty adjacent square - a courteous move designed to help other XOrganisms who might need food.
+  \item If there was no food in its square, and the organism was not sated, then it would attempt to move into an adjacent square with food. Usually, if there was no food available, the organism would stay put. But every 20th turn (determined by the age counter), it would make a random move in order to seek out pockets of food that might be just beyond its field of vision.
+\end{enumerate}
 
-\subsection{Placement}
+This implementation was very simple - only 100 lines of Java code. This is notable because this organism did tend to survive on its own, showing that even very simple heuristics can lead to acceptable results.
+
+\subsection{Protective Farmer}
 In the early phases, we enumerated the different placement strategies and switched according to values of P and K. Our final implementation was fairly simple, and consisted of a random placement of players near the homegoal, with a bounded parameter on $k$ determining their range.
 
 By starting in a tight cluster bounded by the square from our goal out $MIN(K,10)$ spaces, our players would fan out across the board, while the kicking algorithm led to a trail of $k$-spaced players who formed a bucket brigade. The relatively small square space for player placement was chosen as it balanced the advantages of fanning outward from the goal with scoring an initial $k$-distanced ball for each player.
 
-\subsection{Locking Mechanism}
+\subsection{SimplePlayer}
 As we found through our trials, using a benefit function to determine where a player should go runs into problems when players want to go to the same cell. The players will eventually converge and go to the same cells the rest of the game. To prevent this major inefficency, we implemented a locking mechanism where only one player can go after a single cell at a time. However, we found that although this works great through most of the game, when the number of balls is very small, it becomes better for multiple players to go after the same ball to have a higher likelyhood of kicking the ball to the goal. As such, when the number of balls reaches the number of players on the field, we turn off the locking mechanism.
 
 After only locking the cell that the player is going towards, we also lock a radius around that cell. This allows us to create zones such that only one player clearing a zone.Through experimentation, we found that choosing a radius of max(0,3-P/10) works well. With higher number of players, the smaller the zones should become because there is not enough space to create so many zones. Addditionally, it is more likely that opponents will steal balls from a particular zone before a single player can clear that zone out.
-
-\subsection {Auxiliary Board}
-The benefit function we used to guide the movement of each player required us to be able to quickly accesss the not only the positions of our own teammates and the balls, but also the positions of our opponents. Moreover, each player needed to know the next postion of every other teammate to ensure smooth kicking and minimal wastage of moves. We encapsulated all this information in an auxiliary board that we refreshed at every time-step. This additional board was a $32 \times 32$ matrix of cells. Each of these cells was an instance of a custom class (Cell) that we created to hold information on the number of opponents, number of teammates now, number of teammates in the next turn and number of balls in the corresponding position on the real board. We found that maintaining this auxiliary board with information specific to our team greatly simplified the code we wrote in other parts of our Player and gave every teammate quick access to decision-critical information.
 
 \section{Results}
 Generally speaking, we had mixed results. Our rank ranged from $1^{st}$ to $7^{th}$ place. Our most common standing was $3^{rd}$ place. We observed that scores followed relative rank, so we chose rank as the proxy for overall performance in the tournaments.
@@ -204,44 +206,17 @@ Just as we adopted many good ideas by other teams (see Acknowledgements section)
 
 \section{Future Directions and Limitations}
 
-\subsection{Strengthen Early Game Through Sweeping}
-Among teams that placed highly in the tournament, we noticed that their players would tend to start the game by sweeping balls inwards towards their own goal, maximizing their early-game wins before beginning to spread out across the board. Our players, which started close to our own goal, did not exhibit this behavior. Adapting our placement strategy so that they started farther away might be sufficient to achieve this result; however, we could also look into a composability solution in which a sweeping strategy is used for the very first portion of the game before switching to our current players' behavior. This would require significantly tweaking our composability behavior, particularly the point at which the behavior switch occurred, in order to ensure that our players did not continue sweeping for too long before switching to mid-game behavior.
+\subsection{Faster Initial Spread}
 
-\subsection{Generalized Step Distance}
-This idea stems from our attempts to take advantage of global-scope “hotspots,” or high-density ball clusters that are not near the goal. The existing implementation weights balls close to the home goal particularly high, which is good in the early game, but may not be ideal overall.
+Our players tended to do best on larger boards because of its high energy density. It tended not to overextend, unlike some other organisms which would tend to start dying frequently due to very aggressive population growth. But on small maps, this aggressive overextension was actually beneficial to these organisms, because they could ``choke out'' less aggressive competitors and dominate all food resources. Once their opponents went extinct, their organisms would settle into a steady state of lower population and energy compared to their initial population explosion. However, by that time, it was too late for slower-growing competitors like SimplePlayer.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.8\columnwidth]{hotspot}
-\caption[Example of non-local hotspot]{Example of non-local hotspot after 145 turns with $P=7$, $K=6$. Note how balls are clustered in top bottom-left corner}
-\label{fig:gallery2}
-\end{figure}
-
-As we can see in the figure above, certain strategies tend to cluster balls near an opponent goal, where they stay relatively untouched for several cycles. A smarter global-cluster detection would drop the current strategy
-
-The biggest disadvantage to this approach is that the time it takes to travel to such a cluster may be greater than the the time the cluster exists. Even if the seeking team is able to reach the cluster in time, the balls lost in the transit time may not be worth it.
-
-It would be possible to determine, by factoring in the number of balls left $B_{total}$, the number of balls in close range $B_{nearby}$, and the number of balls expected to remain in the cluster $B_{cluster}$. Such a strategy would decide to go for the cluster if and only if:
-$$B_{total} - B_{nearby} < B_{cluster}$$
-
-One way of implementing this strategy would be to generalize the  \texttt{numberOfStepsToGoal()} benefit function to be \texttt{numberOfStepsToPosition(p)}, where the latter takes in any valid position $p$ as it’s argument, causing the cells around it to get a score boost. Then, upon deciding to pursue a cluster, this position would be updated to the cluster center, until a new position was found.
-
-\subsection{Pathing}
-It becomes clear through watching our players that a pathing algorithm could improve our players drastically. We found that our players will often take the same path to their desired locations even though their destinations are distinct. This creates inefficiencies as if there are balls on that path, only one player is needed to clear those balls. In the future, we would look into minimizing the number of cells such that two players would through to reach their destination.
-
-Another problem with our players with pathing is that they arbitrarily choose a minimum path to its destination. So, if two paths are equally minimal, the player will not choose the path with the most balls, thus missing opportunties to score more points. In the same vein, if two paths are slightly different in the number of steps but the longer path has way more balls, the player will choose the shorter path, causing inefficiencies. To fix this problem, The path the player should take should additionally take into consideration how many balls the player can kick on that path.
+Although an organism might not know the size of the board it starts on, we believe that our SimplePlayer could benefit from employing a more aggressive strategy \textit{only during the first part of the game}. The ideal length of this ``aggressive period'' might vary based on known map conditions, but based on our observations of population explosions in configurations where the total grid size was less than 1000, we believe that around 100 turns of aggressive expansion is usually sufficient to gain dominance over a large portion of the map. Once this period is up, we would switch to our current, more conservative strategy to take advantage of its natural tendency towards higher energy density. This would make our SimplePlayer much harder to choke out at the beginning, but would still allow it to take advantage of its effective conservative strategy after the intial territory grab. Following the initial population explosion, organisms that maintained aggression would tend to move more and use more energy, which would allow our less aggressive organisms to slowly chip away at their territory while maintaining a high average energy level.
 
 \section{Acknowledgments}
 
-Our progress was largely a result of the class discussions and adopted strategies. Through the course of the project, we adopted starting strategies from Groups 1 (Grid Player), as well as experiments in stealing opponent balls with the opening placements. We would like to give special thanks to Groups 2 and 6 for the important heuristics we adopted from them and eventually used in our final implementation.
-
-Group 2 (The Swarm) was the first group to successfully implement a kind of benefit function with the emergent behavior of a bucket brigade. This function was based on the number of steps from the ball to the goal, and we adopted it as a core feature of our ensemble benefit function.
-
-Group 6 (Bucket Brigade) contributed a smarter kicking function that favored passing to players over kicking as far to the goal as possible. We adopted this idea as a core part of our improved kicking strategy.
+The evolution of our players was heavily based on class discussion and iteration of our original ideas based on in-class runs. Group 2 was particularly helpful, due to its ``Rabbits'' strategy (later renamed to ``Harvey''). Their fast expansion - and the way they efficiently choked out our XOrganism and our first draft of SinglePlayer - convinced us of the need to be less cautious about our reproduction chances if we wanted to compete in high-food environments.
 
 \section{Conclusion}
 
-Overall we were happy with the progression of this project and the contributions that our group was able to make to the class, including the benefit function and the composable players. We were also quite pleased with our performance during the second week of the project when our player came out on top!
-
-We hope to take the lessons learned on this project and apply them to later projects in the class. In particular, the idea of optimizing for the early stage of the game (which turned out to be key in parallel football) may prove extremely useful later on as well. Especially in zero-sum games like this one, it can be difficult to stage a come from behind victory when one team starts out with a convincing lead.
+Overall we were happy with the progression of this project, particularly our SimplePlayer's performance on large boards or boards with high movement costs. We ended up with the highest population and overall energy in several of the tournament configurations, showing that good results could be achieved even with comparatively simple heuristics.
 \end{document}
